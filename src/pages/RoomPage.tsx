@@ -265,18 +265,17 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomCode, onLeave }) => {
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-2xl border shadow-lg backdrop-blur-md"
+                  className="flex items-center justify-center px-3.5 py-1.5 rounded-2xl border shadow-lg backdrop-blur-md"
                   style={{
                     backgroundColor: 'rgba(7, 31, 24, 0.85)',
                     borderColor: '#248268',
                   }}
                 >
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                  <div className="flex flex-col">
+                  <div className="flex flex-col items-center text-center">
                     <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider leading-none text-emerald-200/70">
                       Kiri
                     </span>
-                    <span className="font-mono text-base sm:text-xl font-black leading-tight text-white">
+                    <span className="font-mono text-base sm:text-xl font-black leading-tight text-white mt-0.5">
                       {match.leftValue}
                     </span>
                   </div>
@@ -301,21 +300,20 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomCode, onLeave }) => {
                 <motion.div
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-2xl border shadow-lg backdrop-blur-md"
+                  className="flex items-center justify-center px-3.5 py-1.5 rounded-2xl border shadow-lg backdrop-blur-md"
                   style={{
                     backgroundColor: 'rgba(7, 31, 24, 0.85)',
                     borderColor: '#248268',
                   }}
                 >
-                  <div className="flex flex-col text-right">
+                  <div className="flex flex-col items-center text-center">
                     <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider leading-none text-emerald-200/70">
                       Kanan
                     </span>
-                    <span className="font-mono text-base sm:text-xl font-black leading-tight text-white">
+                    <span className="font-mono text-base sm:text-xl font-black leading-tight text-white mt-0.5">
                       {match.rightValue}
                     </span>
                   </div>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
                 </motion.div>
               )}
             </div>
