@@ -25,7 +25,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomCode, onLeave }) => {
     roomState,
     privateHand,
     selectedTileId,
-    connectRoom,
     joinRoom,
     startGame,
     playTile,
