@@ -1,3 +1,4 @@
+import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import {
   RoomState,
   MatchState,
@@ -32,11 +33,14 @@ export type StateListener = (state: RoomState, privateHand: DominoTileData[]) =>
 export type ErrorListener = (errorMsg: string) => void;
 
 /**
- * Local / Multi-Tab Broadcast Synchronization Engine
- * Handles realtime rooms across browser tabs/windows with host authority and private hand isolation.
+ * Universal Hybrid Realtime Sync Engine
+ * Seamlessly integrates Supabase Realtime WebSockets for cross-device online play
+ * and BroadcastChannel for zero-latency local multi-tab sync.
  */
 export class BroadcastSyncEngine {
   private channel: BroadcastChannel | null = null;
+  private supabase: SupabaseClient | null = null;
+  private supabaseChannel: RealtimeChannel | null = null;
   private roomCode: string = '';
   private currentUserId: string = '';
   private currentNickname: string = '';
@@ -53,12 +57,30 @@ export class BroadcastSyncEngine {
   constructor(userId: string, nickname: string) {
     this.currentUserId = userId;
     this.currentNickname = nickname;
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey =
+      import.meta.env.VITE_SUPABASE_ANON_KEY ||
+      import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+    if (supabaseUrl && supabaseKey) {
+      try {
+        this.supabase = createClient(supabaseUrl, supabaseKey);
+      } catch (err) {
+        console.warn('Supabase client init failed, falling back to local sync:', err);
+      }
+    }
   }
 
   public connect(roomCode: string): void {
     if (this.channel) {
       this.channel.close();
     }
+    if (this.supabase && this.supabaseChannel) {
+      this.supabase.removeChannel(this.supabaseChannel);
+      this.supabaseChannel = null;
+    }
+
     this.roomCode = roomCode.toUpperCase();
     this.channel = new BroadcastChannel(`domino_room_${this.roomCode}`);
 
@@ -66,10 +88,39 @@ export class BroadcastSyncEngine {
       this.handleIncomingMessage(event.data);
     };
 
+    // Connect to Supabase Realtime WebSockets for global cross-device connectivity
+    if (this.supabase) {
+      this.supabaseChannel = this.supabase.channel(`domino_${this.roomCode}`, {
+        config: {
+          broadcast: { self: false },
+        },
+      });
+
+      this.supabaseChannel
+        .on('broadcast', { event: 'domino_sync' }, ({ payload }) => {
+          this.handleIncomingMessage(payload as SyncMessage);
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            // Once connected to Supabase WebSocket, announce presence
+            this.broadcast({
+              type: 'REQUEST_FULL_STATE',
+              roomCode: this.roomCode,
+              senderId: this.currentUserId,
+              payload: { nickname: this.currentNickname },
+            });
+          }
+        });
+
+      // Also query cloud database for instant room snapshot
+      this.fetchCloudRoomState();
+    }
+
     // Load initial cached state from localStorage if available
-    const savedStateStr = typeof localStorage !== 'undefined'
-      ? localStorage.getItem(`domino_room_state_${this.roomCode}`)
-      : null;
+    const savedStateStr =
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem(`domino_room_state_${this.roomCode}`)
+        : null;
 
     if (savedStateStr) {
       try {
@@ -79,9 +130,10 @@ export class BroadcastSyncEngine {
       }
     }
 
-    const savedHandStr = typeof sessionStorage !== 'undefined'
-      ? sessionStorage.getItem(`domino_hand_${this.roomCode}_${this.currentUserId}`)
-      : null;
+    const savedHandStr =
+      typeof sessionStorage !== 'undefined'
+        ? sessionStorage.getItem(`domino_hand_${this.roomCode}_${this.currentUserId}`)
+        : null;
 
     if (savedHandStr) {
       try {
@@ -102,11 +154,50 @@ export class BroadcastSyncEngine {
     this.notifyState();
   }
 
+  private async fetchCloudRoomState(): Promise<void> {
+    if (!this.supabase) return;
+    try {
+      const { data, error } = await this.supabase
+        .from('rooms')
+        .select('*')
+        .eq('code', this.roomCode)
+        .maybeSingle();
+
+      if (!error && data) {
+        const cloudState: RoomState = {
+          code: data.code,
+          hostId: data.host_id,
+          maxPlayers: data.max_players,
+          status: data.status,
+          players: data.players || [],
+          createdAt: new Date(data.created_at).getTime(),
+          updatedAt: new Date(data.updated_at).getTime(),
+          match: data.match_state || undefined,
+        };
+
+        if (
+          !this.localRoomState ||
+          cloudState.updatedAt >= this.localRoomState.updatedAt
+        ) {
+          this.localRoomState = cloudState;
+          this.saveStateToStorage(cloudState);
+          this.notifyState();
+        }
+      }
+    } catch {
+      // cloud fetch non-blocking
+    }
+  }
+
   public disconnect(): void {
     if (this.channel) {
       this.leaveRoom();
       this.channel.close();
       this.channel = null;
+    }
+    if (this.supabase && this.supabaseChannel) {
+      this.supabase.removeChannel(this.supabaseChannel);
+      this.supabaseChannel = null;
     }
     this.stateListeners.clear();
     this.errorListeners.clear();
@@ -137,8 +228,17 @@ export class BroadcastSyncEngine {
   }
 
   private broadcast(msg: SyncMessage): void {
+    // Local multi-tab broadcast
     if (this.channel) {
       this.channel.postMessage(msg);
+    }
+    // Global internet multi-device WebSocket broadcast via Supabase Realtime
+    if (this.supabaseChannel) {
+      this.supabaseChannel.send({
+        type: 'broadcast',
+        event: 'domino_sync',
+        payload: msg,
+      });
     }
   }
 
@@ -197,6 +297,9 @@ export class BroadcastSyncEngine {
       senderId: this.currentUserId,
       payload: { nickname, intent: 'join' },
     });
+
+    // Also fetch cloud room state immediately
+    this.fetchCloudRoomState();
   }
 
   /**
@@ -671,7 +774,7 @@ export class BroadcastSyncEngine {
             this.localRoomState = updatedState;
           }
 
-          // Broadcast public state to other tabs
+          // Broadcast public state to other tabs/devices
           this.broadcast({
             type: 'STATE_UPDATE',
             roomCode: this.roomCode,
@@ -679,7 +782,7 @@ export class BroadcastSyncEngine {
             payload: { roomState: this.localRoomState },
           });
 
-          // Also immediately notify host tab!
+          // Also immediately notify host UI
           this.notifyState();
 
           // If game is playing, resend private hand to reconnected player
@@ -714,6 +817,7 @@ export class BroadcastSyncEngine {
   }
 
   private saveStateToStorage(state: RoomState): void {
+    // Local storage
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(
@@ -723,6 +827,25 @@ export class BroadcastSyncEngine {
       }
     } catch {
       // storage quota
+    }
+
+    // Cloud database persistence (Supabase Postgres)
+    if (this.supabase) {
+      this.supabase
+        .from('rooms')
+        .upsert(
+          {
+            code: this.roomCode,
+            host_id: state.hostId,
+            max_players: state.maxPlayers,
+            status: state.status,
+            players: state.players,
+            match_state: state.match || null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'code' }
+        )
+        .then();
     }
   }
 
