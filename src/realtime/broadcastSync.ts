@@ -34,8 +34,7 @@ export type ErrorListener = (errorMsg: string) => void;
 
 /**
  * Universal Hybrid Realtime Sync Engine
- * Seamlessly integrates Supabase Realtime WebSockets for cross-device online play
- * and BroadcastChannel for zero-latency local multi-tab sync.
+ * Combines Supabase Database + Postgres Changes + Realtime WebSockets Broadcast + BroadcastChannel
  */
 export class BroadcastSyncEngine {
   private channel: BroadcastChannel | null = null;
@@ -67,7 +66,7 @@ export class BroadcastSyncEngine {
       try {
         this.supabase = createClient(supabaseUrl, supabaseKey);
       } catch (err) {
-        console.warn('Supabase client init failed, falling back to local sync:', err);
+        console.warn('Supabase client init error:', err);
       }
     }
   }
@@ -88,7 +87,30 @@ export class BroadcastSyncEngine {
       this.handleIncomingMessage(event.data);
     };
 
-    // Connect to Supabase Realtime WebSockets for global cross-device connectivity
+    // Load initial cached state from localStorage if available
+    const savedStateStr =
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem(`domino_room_state_${this.roomCode}`)
+        : null;
+
+    if (savedStateStr) {
+      try {
+        this.localRoomState = JSON.parse(savedStateStr);
+      } catch {}
+    }
+
+    const savedHandStr =
+      typeof sessionStorage !== 'undefined'
+        ? sessionStorage.getItem(`domino_hand_${this.roomCode}_${this.currentUserId}`)
+        : null;
+
+    if (savedHandStr) {
+      try {
+        this.localPrivateHand = JSON.parse(savedHandStr);
+      } catch {}
+    }
+
+    // Connect to Supabase Realtime WebSockets & Database changes
     if (this.supabase) {
       this.supabaseChannel = this.supabase.channel(`domino_${this.roomCode}`, {
         config: {
@@ -100,9 +122,34 @@ export class BroadcastSyncEngine {
         .on('broadcast', { event: 'domino_sync' }, ({ payload }) => {
           this.handleIncomingMessage(payload as SyncMessage);
         })
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'rooms',
+            filter: `code=eq.${this.roomCode}`,
+          },
+          (payload) => {
+            if (payload.new) {
+              const row = payload.new as any;
+              const cloudState: RoomState = {
+                code: row.code,
+                hostId: row.host_id,
+                maxPlayers: row.max_players,
+                status: row.status,
+                players: row.players || [],
+                createdAt: new Date(row.created_at).getTime(),
+                updatedAt: new Date(row.updated_at).getTime(),
+                match: row.match_state || undefined,
+              };
+              this.localRoomState = cloudState;
+              this.notifyState();
+            }
+          }
+        )
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
-            // Once connected to Supabase WebSocket, announce presence
             this.broadcast({
               type: 'REQUEST_FULL_STATE',
               roomCode: this.roomCode,
@@ -112,38 +159,11 @@ export class BroadcastSyncEngine {
           }
         });
 
-      // Also query cloud database for instant room snapshot
+      // Instantly query cloud database
       this.fetchCloudRoomState();
     }
 
-    // Load initial cached state from localStorage if available
-    const savedStateStr =
-      typeof localStorage !== 'undefined'
-        ? localStorage.getItem(`domino_room_state_${this.roomCode}`)
-        : null;
-
-    if (savedStateStr) {
-      try {
-        this.localRoomState = JSON.parse(savedStateStr);
-      } catch {
-        // ignore
-      }
-    }
-
-    const savedHandStr =
-      typeof sessionStorage !== 'undefined'
-        ? sessionStorage.getItem(`domino_hand_${this.roomCode}_${this.currentUserId}`)
-        : null;
-
-    if (savedHandStr) {
-      try {
-        this.localPrivateHand = JSON.parse(savedHandStr);
-      } catch {
-        // ignore
-      }
-    }
-
-    // Request fresh state from room host/peers
+    // Request state from local peers
     this.broadcast({
       type: 'REQUEST_FULL_STATE',
       roomCode: this.roomCode,
@@ -154,8 +174,8 @@ export class BroadcastSyncEngine {
     this.notifyState();
   }
 
-  private async fetchCloudRoomState(): Promise<void> {
-    if (!this.supabase) return;
+  public async fetchCloudRoomState(): Promise<RoomState | null> {
+    if (!this.supabase) return null;
     try {
       const { data, error } = await this.supabase
         .from('rooms')
@@ -163,7 +183,12 @@ export class BroadcastSyncEngine {
         .eq('code', this.roomCode)
         .maybeSingle();
 
-      if (!error && data) {
+      if (error) {
+        console.error('Error fetching room from Supabase:', error);
+        return null;
+      }
+
+      if (data) {
         const cloudState: RoomState = {
           code: data.code,
           hostId: data.host_id,
@@ -183,10 +208,12 @@ export class BroadcastSyncEngine {
           this.saveStateToStorage(cloudState);
           this.notifyState();
         }
+        return cloudState;
       }
-    } catch {
-      // cloud fetch non-blocking
+    } catch (err) {
+      console.error('fetchCloudRoomState failed:', err);
     }
+    return null;
   }
 
   public disconnect(): void {
@@ -228,11 +255,9 @@ export class BroadcastSyncEngine {
   }
 
   private broadcast(msg: SyncMessage): void {
-    // Local multi-tab broadcast
     if (this.channel) {
       this.channel.postMessage(msg);
     }
-    // Global internet multi-device WebSocket broadcast via Supabase Realtime
     if (this.supabaseChannel) {
       this.supabaseChannel.send({
         type: 'broadcast',
@@ -287,19 +312,98 @@ export class BroadcastSyncEngine {
   }
 
   /**
-   * JOIN ROOM
+   * JOIN ROOM (Direct Database Join + WebSocket Broadcast)
    */
-  public joinRoom(nickname: string): void {
+  public async joinRoom(nickname: string): Promise<void> {
     this.currentNickname = nickname;
+
+    // 1. Direct Supabase Cloud Join
+    if (this.supabase) {
+      try {
+        const { data, error } = await this.supabase
+          .from('rooms')
+          .select('*')
+          .eq('code', this.roomCode)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Supabase query error on join:', error);
+        } else if (!data) {
+          this.notifyError(`Room "${this.roomCode}" tidak ditemukan.`);
+        } else {
+          const players: PlayerPublicInfo[] = data.players || [];
+          const existingPlayer = players.find((p) => p.id === this.currentUserId);
+
+          if (!existingPlayer) {
+            if (data.status !== 'lobby') {
+              this.notifyError('Permainan di room ini sudah dimulai.');
+              return;
+            }
+            if (players.length >= data.max_players) {
+              this.notifyError('Room sudah penuh.');
+              return;
+            }
+
+            const newPlayer: PlayerPublicInfo = {
+              id: this.currentUserId,
+              nickname,
+              seatNumber: players.length,
+              isHost: false,
+              isConnected: true,
+              tileCount: 0,
+              lastSeen: Date.now(),
+            };
+
+            const updatedPlayers = [...players, newPlayer];
+            const updatedState: RoomState = {
+              code: data.code,
+              hostId: data.host_id,
+              maxPlayers: data.max_players,
+              status: data.status,
+              players: updatedPlayers,
+              createdAt: new Date(data.created_at).getTime(),
+              updatedAt: Date.now(),
+              match: data.match_state || undefined,
+            };
+
+            this.localRoomState = updatedState;
+            this.saveStateToStorage(updatedState);
+            this.broadcast({
+              type: 'STATE_UPDATE',
+              roomCode: this.roomCode,
+              senderId: this.currentUserId,
+              payload: { roomState: updatedState },
+            });
+            this.notifyState();
+            return;
+          } else {
+            // Reconnect existing player
+            const updatedState: RoomState = {
+              code: data.code,
+              hostId: data.host_id,
+              maxPlayers: data.max_players,
+              status: data.status,
+              players,
+              createdAt: new Date(data.created_at).getTime(),
+              updatedAt: new Date(data.updated_at).getTime(),
+              match: data.match_state || undefined,
+            };
+            this.localRoomState = updatedState;
+            this.notifyState();
+          }
+        }
+      } catch (err) {
+        console.error('joinRoom Supabase exception:', err);
+      }
+    }
+
+    // 2. Broadcast join intent to active peers/host
     this.broadcast({
       type: 'REQUEST_FULL_STATE',
       roomCode: this.roomCode,
       senderId: this.currentUserId,
       payload: { nickname, intent: 'join' },
     });
-
-    // Also fetch cloud room state immediately
-    this.fetchCloudRoomState();
   }
 
   /**
@@ -418,7 +522,6 @@ export class BroadcastSyncEngine {
     if (this.isHost()) {
       this.executePlayTileAuth(this.currentUserId, tileId, side);
     } else {
-      // Send intent to host
       this.broadcast({
         type: 'PLAYER_ACTION_INTENT',
         roomCode: this.roomCode,
@@ -439,7 +542,6 @@ export class BroadcastSyncEngine {
       return;
     }
 
-    // Verify player really has no legal moves
     const hasMove = hasAnyLegalMove(
       this.localPrivateHand,
       this.localRoomState.match.leftValue,
@@ -500,6 +602,8 @@ export class BroadcastSyncEngine {
       updatedAt: Date.now(),
     };
 
+    this.saveStateToStorage(updatedState);
+
     this.broadcast({
       type: 'STATE_UPDATE',
       roomCode: this.roomCode,
@@ -547,7 +651,6 @@ export class BroadcastSyncEngine {
         playerId
       );
 
-      // Remove played tile from player's hand
       const updatedHand = playerHand.filter((t) => t.id !== tileId);
       this.allHandsAuth[playerId] = updatedHand;
 
@@ -560,7 +663,6 @@ export class BroadcastSyncEngine {
       const playerNick =
         this.localRoomState.players.find((p) => p.id === playerId)?.nickname || 'Player';
 
-      // Check win condition (domino: hand count is 0)
       const isWinner = updatedHand.length === 0;
 
       let nextPlayerId = getNextPlayerId(match.playerOrder, playerId);
@@ -574,7 +676,6 @@ export class BroadcastSyncEngine {
         winnerPlayerId = playerId;
         winReason = 'domino';
 
-        // Calculate scores for final results
         const blockedEval = evaluateBlockedGame(
           this.localRoomState.players,
           this.allHandsAuth
@@ -621,7 +722,6 @@ export class BroadcastSyncEngine {
       this.localRoomState = updatedRoom;
       this.saveStateToStorage(updatedRoom);
 
-      // Broadcast public state
       this.broadcast({
         type: 'STATE_UPDATE',
         roomCode: this.roomCode,
@@ -629,7 +729,6 @@ export class BroadcastSyncEngine {
         payload: { roomState: updatedRoom },
       });
 
-      // Update player's private hand
       if (playerId !== this.currentUserId) {
         this.broadcast({
           type: 'PRIVATE_HAND_UPDATE',
@@ -741,17 +840,10 @@ export class BroadcastSyncEngine {
           const senderId = msg.senderId;
           const senderNick = msg.payload?.nickname || 'Player';
 
-          // Handle player joining
           const existingPlayer = updatedState.players.find((p) => p.id === senderId);
           if (!existingPlayer) {
-            if (updatedState.status !== 'lobby') {
-              // Game in progress, cannot join
-              return;
-            }
-            if (updatedState.players.length >= updatedState.maxPlayers) {
-              // Room full
-              return;
-            }
+            if (updatedState.status !== 'lobby') return;
+            if (updatedState.players.length >= updatedState.maxPlayers) return;
 
             const newPlayer: PlayerPublicInfo = {
               id: senderId,
@@ -768,13 +860,11 @@ export class BroadcastSyncEngine {
             this.localRoomState = updatedState;
             this.saveStateToStorage(updatedState);
           } else {
-            // Player reconnecting
             existingPlayer.isConnected = true;
             existingPlayer.lastSeen = Date.now();
             this.localRoomState = updatedState;
           }
 
-          // Broadcast public state to other tabs/devices
           this.broadcast({
             type: 'STATE_UPDATE',
             roomCode: this.roomCode,
@@ -782,10 +872,8 @@ export class BroadcastSyncEngine {
             payload: { roomState: this.localRoomState },
           });
 
-          // Also immediately notify host UI
           this.notifyState();
 
-          // If game is playing, resend private hand to reconnected player
           if (this.localRoomState.status === 'playing' && this.allHandsAuth[senderId]) {
             this.broadcast({
               type: 'PRIVATE_HAND_UPDATE',
@@ -816,8 +904,7 @@ export class BroadcastSyncEngine {
     }
   }
 
-  private saveStateToStorage(state: RoomState): void {
-    // Local storage
+  private async saveStateToStorage(state: RoomState): Promise<void> {
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(
@@ -825,15 +912,11 @@ export class BroadcastSyncEngine {
           JSON.stringify(state)
         );
       }
-    } catch {
-      // storage quota
-    }
+    } catch {}
 
-    // Cloud database persistence (Supabase Postgres)
     if (this.supabase) {
-      this.supabase
-        .from('rooms')
-        .upsert(
+      try {
+        await this.supabase.from('rooms').upsert(
           {
             code: this.roomCode,
             host_id: state.hostId,
@@ -844,8 +927,10 @@ export class BroadcastSyncEngine {
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'code' }
-        )
-        .then();
+        );
+      } catch (err) {
+        console.warn('Supabase upsert non-critical warning:', err);
+      }
     }
   }
 
@@ -857,9 +942,7 @@ export class BroadcastSyncEngine {
           JSON.stringify(hand)
         );
       }
-    } catch {
-      // storage quota
-    }
+    } catch {}
   }
 
   public getLegalMoves(): Record<string, LegalMoveInfo> {

@@ -20,7 +20,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   prefilledCode = '',
 }) => {
   const { nickname, setNickname, theme, toggleTheme } = usePlayerStore();
-  const { createRoom, connectRoom, showToast } = useGameStore();
+  const { createRoom, connectRoom, joinRoom, showToast } = useGameStore();
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(Boolean(prefilledCode));
@@ -58,6 +58,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     if (!trimmedName) { showToast('Masukkan nama Anda terlebih dahulu'); return; }
     if (cleanedCode.length < 4) { showToast('Masukkan kode room yang valid'); return; }
     setNickname(trimmedName);
+    connectRoom(cleanedCode);
+    joinRoom(cleanedCode, trimmedName);
     setIsJoinModalOpen(false);
     onEnterRoom(cleanedCode);
   };
