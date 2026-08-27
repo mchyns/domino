@@ -425,6 +425,30 @@ export class BroadcastSyncEngine {
     const playerIds = this.localRoomState.players.map((p) => p.id);
     const deal = dealTiles(playerIds, this.localRoomState.maxPlayers);
 
+    // Compute player turn order:
+    // On rematch: 1st turn = Winner of previous game, 2nd turn = 2nd lowest points, 3rd = 3rd lowest, etc.
+    let orderedPlayerIds = [...playerIds];
+    let firstPlayerId = deal.firstPlayerId;
+
+    const prevMatch = this.localRoomState.match;
+    if (
+      prevMatch &&
+      prevMatch.status === 'finished' &&
+      prevMatch.scores &&
+      prevMatch.scores.length > 0
+    ) {
+      const sortedByRank = prevMatch.scores
+        .map((s) => s.playerId)
+        .filter((id) => playerIds.includes(id));
+
+      playerIds.forEach((id) => {
+        if (!sortedByRank.includes(id)) sortedByRank.push(id);
+      });
+
+      orderedPlayerIds = sortedByRank;
+      firstPlayerId = orderedPlayerIds[0]; // Winner plays first!
+    }
+
     this.allHandsAuth = deal.hands;
     const now = Date.now();
 
@@ -454,8 +478,8 @@ export class BroadcastSyncEngine {
       id: `match_${now}`,
       roomCode: this.roomCode,
       status: 'playing',
-      currentPlayerId: deal.firstPlayerId,
-      playerOrder: playerIds,
+      currentPlayerId: firstPlayerId,
+      playerOrder: orderedPlayerIds,
       starterTile: deal.starterTile,
       board,
       leftValue: deal.starterTile ? deal.starterTile.a : null,
@@ -678,9 +702,17 @@ export class BroadcastSyncEngine {
 
         const blockedEval = evaluateBlockedGame(
           this.localRoomState.players,
-          this.allHandsAuth
+          {
+            ...this.allHandsAuth,
+            [playerId]: [],
+          }
         );
         scores = blockedEval.scores;
+        const winnerIndex = scores.findIndex((s) => s.playerId === playerId);
+        if (winnerIndex > 0) {
+          const [w] = scores.splice(winnerIndex, 1);
+          scores.unshift(w);
+        }
       }
 
       const updatedPlayers = this.localRoomState.players.map((p) => ({

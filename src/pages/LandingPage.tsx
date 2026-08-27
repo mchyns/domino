@@ -45,7 +45,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     if (!trimmed) { showToast('Masukkan nama Anda terlebih dahulu'); return; }
     setNickname(trimmed);
     const newCode = generateRoomCode();
-    connectRoom(newCode);
+    connectRoom(newCode, trimmed);
     createRoom(maxPlayers);
     setIsCreateModalOpen(false);
     onEnterRoom(newCode);

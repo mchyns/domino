@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { cn } from '../../lib/utils';
+
+type DominoPipValue = number;
 
 export interface DominoTileProps {
   a: number;
@@ -8,6 +9,7 @@ export interface DominoTileProps {
   displayLeft?: number;
   displayRight?: number;
   orientation?: 'vertical' | 'horizontal';
+  reversed?: boolean;
   isSelected?: boolean;
   isDisabled?: boolean;
   isPlayable?: boolean;
@@ -18,47 +20,246 @@ export interface DominoTileProps {
   entranceDelay?: number;
 }
 
-/* Pip positions for 0-6 on a 60×60 half-tile (center = 30,30) */
-const PIP_POSITIONS: Record<number, [number, number][]> = {
+// Pip coordinates inside standard 60x60 square
+const PIP_POSITIONS: Record<DominoPipValue, Array<[number, number]>> = {
   0: [],
   1: [[30, 30]],
-  2: [[18, 18], [42, 42]],
-  3: [[42, 18], [30, 30], [18, 42]],
-  4: [[18, 18], [42, 18], [18, 42], [42, 42]],
-  5: [[18, 18], [42, 18], [30, 30], [18, 42], [42, 42]],
-  6: [[18, 18], [42, 18], [18, 30], [42, 30], [18, 42], [42, 42]],
+  2: [
+    [18, 18],
+    [42, 42],
+  ],
+  3: [
+    [18, 18],
+    [30, 30],
+    [42, 42],
+  ],
+  4: [
+    [18, 18],
+    [42, 18],
+    [18, 42],
+    [42, 42],
+  ],
+  5: [
+    [18, 18],
+    [42, 18],
+    [30, 30],
+    [18, 42],
+    [42, 42],
+  ],
+  6: [
+    [18, 16],
+    [42, 16],
+    [18, 30],
+    [42, 30],
+    [18, 44],
+    [42, 44],
+  ],
 };
 
-function InlineDominoSvg({ topVal, bottomVal }: { topVal: number; bottomVal: number }) {
-  const topPips = PIP_POSITIONS[topVal] || [];
-  const bottomPips = PIP_POSITIONS[bottomVal] || [];
+// Signature Higgs Domino Ruby Red Pip Color
+const PIP_COLOR = '#A31D1D'; // Authentic deep ruby/crimson red
+const PIP_CENTER_RED = '#B91C1C';
+
+function InlineDominoSvg({
+  val1,
+  val2,
+  isHorizontal,
+}: {
+  val1: number;
+  val2: number;
+  isHorizontal: boolean;
+}) {
+  const pips1 = PIP_POSITIONS[val1 as DominoPipValue] || [];
+  const pips2 = PIP_POSITIONS[val2 as DominoPipValue] || [];
+
+  if (isHorizontal) {
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 120 60"
+        className="w-full h-full block"
+        style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.28))' }}
+      >
+        <defs>
+          <linearGradient id="tileGradH" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#FFFFFF" />
+            <stop offset="40%" stopColor="#FAF7EE" />
+            <stop offset="100%" stopColor="#EDE7D8" />
+          </linearGradient>
+          <filter id="pipSunkenH" x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="0" dy="0.8" stdDeviation="0.4" floodOpacity="0.45" />
+          </filter>
+        </defs>
+
+        {/* Tile Body Horizontal */}
+        <rect
+          x="1"
+          y="1"
+          width="118"
+          height="58"
+          rx="7"
+          ry="7"
+          fill="url(#tileGradH)"
+          stroke="#BDB5A2"
+          strokeWidth="1.2"
+        />
+
+        {/* Inner 3D Highlight Ring */}
+        <rect
+          x="2.5"
+          y="2.5"
+          width="115"
+          height="55"
+          rx="5.5"
+          ry="5.5"
+          fill="none"
+          stroke="#FFFFFF"
+          strokeOpacity="0.9"
+          strokeWidth="1"
+        />
+
+        {/* Center Divider Groove Vertical */}
+        <line
+          x1="60"
+          y1="5"
+          x2="60"
+          y2="55"
+          stroke="#A39B87"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+        <line
+          x1="61"
+          y1="5"
+          x2="61"
+          y2="55"
+          stroke="#FFFFFF"
+          strokeWidth="0.8"
+          strokeOpacity="0.7"
+          strokeLinecap="round"
+        />
+
+        {/* Center Brass Spinner Pin */}
+        <circle cx="60" cy="30" r="2.2" fill="#D4AF37" stroke="#8A6D1C" strokeWidth="0.6" />
+
+        {/* Left Pips (Ruby Red) */}
+        {pips1.map(([cx, cy], i) => (
+          <circle
+            key={`l${i}`}
+            cx={cx}
+            cy={cy}
+            r={val1 === 1 ? '6.2' : '4.5'}
+            fill={val1 === 1 ? PIP_CENTER_RED : PIP_COLOR}
+            filter="url(#pipSunkenH)"
+          />
+        ))}
+
+        {/* Right Pips (Ruby Red) */}
+        {pips2.map(([cx, cy], i) => (
+          <circle
+            key={`r${i}`}
+            cx={cx + 60}
+            cy={cy}
+            r={val2 === 1 ? '6.2' : '4.5'}
+            fill={val2 === 1 ? PIP_CENTER_RED : PIP_COLOR}
+            filter="url(#pipSunkenH)"
+          />
+        ))}
+      </svg>
+    );
+  }
 
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 120" className="w-full h-full">
-      {/* Tile Body */}
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 60 120"
+      className="w-full h-full block"
+      style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.28))' }}
+    >
+      <defs>
+        <linearGradient id="tileGradV" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="40%" stopColor="#FAF7EE" />
+          <stop offset="100%" stopColor="#EDE7D8" />
+        </linearGradient>
+        <filter id="pipSunkenV" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0.8" stdDeviation="0.4" floodOpacity="0.45" />
+        </filter>
+      </defs>
+
+      {/* Tile Body Vertical */}
       <rect
-        x="1" y="1" width="58" height="118" rx="8" ry="8"
-        className="fill-[var(--tile-bg)] stroke-[var(--tile-border)]"
-        strokeWidth="1.5"
+        x="1"
+        y="1"
+        width="58"
+        height="118"
+        rx="7"
+        ry="7"
+        fill="url(#tileGradV)"
+        stroke="#BDB5A2"
+        strokeWidth="1.2"
       />
-      {/* Inner highlight */}
+
+      {/* Inner 3D Highlight Ring */}
       <rect
-        x="2" y="2" width="56" height="116" rx="7" ry="7"
+        x="2.5"
+        y="2.5"
+        width="55"
+        height="115"
+        rx="5.5"
+        ry="5.5"
         fill="none"
-        className="stroke-[var(--tile-highlight)]"
-        strokeOpacity="0.6"
+        stroke="#FFFFFF"
+        strokeOpacity="0.9"
         strokeWidth="1"
       />
-      {/* Groove */}
-      <line x1="8" y1="60" x2="52" y2="60" className="stroke-[var(--tile-groove)]" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1="8" y1="61" x2="52" y2="61" className="stroke-[var(--tile-highlight)]" strokeWidth="1" strokeOpacity="0.5" strokeLinecap="round" />
-      {/* Top Pips */}
-      {topPips.map(([cx, cy], i) => (
-        <circle key={`t${i}`} cx={cx} cy={cy} r="4.25" className="fill-[var(--tile-pip)]" />
+
+      {/* Center Divider Groove Horizontal */}
+      <line
+        x1="5"
+        y1="60"
+        x2="55"
+        y2="60"
+        stroke="#A39B87"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <line
+        x1="5"
+        y1="61"
+        x2="55"
+        y2="61"
+        stroke="#FFFFFF"
+        strokeWidth="0.8"
+        strokeOpacity="0.7"
+        strokeLinecap="round"
+      />
+
+      {/* Center Brass Spinner Pin */}
+      <circle cx="30" cy="60" r="2.2" fill="#D4AF37" stroke="#8A6D1C" strokeWidth="0.6" />
+
+      {/* Top Pips (Ruby Red) */}
+      {pips1.map(([cx, cy], i) => (
+        <circle
+          key={`t${i}`}
+          cx={cx}
+          cy={cy}
+          r={val1 === 1 ? '6.2' : '4.5'}
+          fill={val1 === 1 ? PIP_CENTER_RED : PIP_COLOR}
+          filter="url(#pipSunkenV)"
+        />
       ))}
-      {/* Bottom Pips */}
-      {bottomPips.map(([cx, cy], i) => (
-        <circle key={`b${i}`} cx={cx} cy={cy + 60} r="4.25" className="fill-[var(--tile-pip)]" />
+
+      {/* Bottom Pips (Ruby Red) */}
+      {pips2.map(([cx, cy], i) => (
+        <circle
+          key={`b${i}`}
+          cx={cx}
+          cy={cy + 60}
+          r={val2 === 1 ? '6.2' : '4.5'}
+          fill={val2 === 1 ? PIP_CENTER_RED : PIP_COLOR}
+          filter="url(#pipSunkenV)"
+        />
       ))}
     </svg>
   );
@@ -70,6 +271,7 @@ export const DominoTile: React.FC<DominoTileProps> = ({
   displayLeft,
   displayRight,
   orientation = 'vertical',
+  reversed = false,
   isSelected = false,
   isDisabled = false,
   isPlayable = true,
@@ -79,41 +281,31 @@ export const DominoTile: React.FC<DominoTileProps> = ({
   animateEntrance = false,
   entranceDelay = 0,
 }) => {
-  const val1 = displayLeft !== undefined ? displayLeft : a;
-  const val2 = displayRight !== undefined ? displayRight : b;
+  const raw1 = displayLeft !== undefined ? displayLeft : a;
+  const raw2 = displayRight !== undefined ? displayRight : b;
 
-  // Size dimensions
+  const val1 = reversed ? raw2 : raw1;
+  const val2 = reversed ? raw1 : raw2;
+
+  const isHorizontal = orientation === 'horizontal';
+
   const sizeClasses = {
     sm: 'w-[28px] h-[56px]',
     md: 'w-[36px] h-[72px]',
     lg: 'w-[48px] h-[96px]',
-    hand: 'w-[44px] h-[88px] sm:w-[50px] sm:h-[100px]',
-    board: 'w-[38px] h-[76px] sm:w-[44px] sm:h-[88px]',
+    hand: 'w-[42px] h-[84px] sm:w-[48px] sm:h-[96px]',
+    board: 'w-[32px] h-[64px]',
   };
 
   const horizontalSizeClasses = {
     sm: 'w-[56px] h-[28px]',
     md: 'w-[72px] h-[36px]',
     lg: 'w-[96px] h-[48px]',
-    hand: 'w-[88px] h-[44px] sm:w-[100px] sm:h-[50px]',
-    board: 'w-[76px] h-[38px] sm:w-[88px] sm:h-[44px]',
+    hand: 'w-[84px] h-[42px] sm:w-[96px] sm:h-[48px]',
+    board: 'w-[64px] h-[32px]',
   };
 
-  const isHorizontal = orientation === 'horizontal';
   const sizeClass = isHorizontal ? horizontalSizeClasses[size] : sizeClasses[size];
-
-  // If display order is reversed (e.g. 5-2 but needs 2-5), flip
-  const shouldFlip = val1 > val2;
-  let rotateDeg = 0;
-  if (isHorizontal) {
-    rotateDeg = shouldFlip ? 270 : 90;
-  } else {
-    rotateDeg = shouldFlip ? 180 : 0;
-  }
-
-  const topVal = Math.min(val1, val2);
-  const bottomVal = Math.max(val1, val2);
-
   const ariaLabel = `Domino ${val1} dan ${val2}`;
 
   return (
@@ -121,8 +313,8 @@ export const DominoTile: React.FC<DominoTileProps> = ({
       layout
       initial={animateEntrance ? { opacity: 0, y: 14, scale: 0.92 } : false}
       animate={{
-        opacity: isDisabled ? 0.5 : 1,
-        y: isSelected ? -10 : 0,
+        opacity: isDisabled ? 0.45 : 1,
+        y: isSelected ? -12 : 0,
         scale: 1,
       }}
       transition={{
@@ -133,37 +325,36 @@ export const DominoTile: React.FC<DominoTileProps> = ({
       }}
       whileHover={
         !isDisabled && isPlayable && onClick
-          ? { y: isSelected ? -10 : -4, transition: { duration: 0.15 } }
+          ? {
+              y: -8,
+              scale: 1.06,
+              transition: { duration: 0.12 },
+            }
           : undefined
       }
       whileTap={
         !isDisabled && isPlayable && onClick
-          ? { scale: 0.96 }
+          ? {
+              scale: 0.96,
+            }
           : undefined
       }
-      onClick={!isDisabled && isPlayable ? onClick : undefined}
-      className={cn(
-        'relative inline-block cursor-pointer select-none transition-shadow duration-200 shrink-0 touch-manipulation rounded-tile',
-        sizeClass,
-        isDisabled && 'cursor-not-allowed opacity-50 filter grayscale-[20%]',
-        isSelected && 'z-20 shadow-tile-selected ring-2 ring-ink',
-        !isDisabled && isPlayable && !isSelected && 'shadow-tile hover:shadow-tile-hover',
-        className
-      )}
-      role="button"
-      tabIndex={isDisabled || !isPlayable ? -1 : 0}
+      onClick={!isDisabled && onClick ? onClick : undefined}
       aria-label={ariaLabel}
-      aria-disabled={isDisabled}
+      className={`
+        relative select-none shrink-0 transition-shadow duration-200
+        ${sizeClass}
+        ${isPlayable && !isDisabled ? 'cursor-pointer' : 'cursor-default'}
+        ${isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-transparent shadow-xl rounded-lg' : ''}
+        ${isPlayable && !isSelected ? 'hover:shadow-lg' : ''}
+        ${className || ''}
+      `}
     >
-      <div
-        className="w-full h-full flex items-center justify-center pointer-events-none"
-        style={{
-          transform: `rotate(${rotateDeg}deg)`,
-          transformOrigin: 'center center',
-        }}
-      >
-        <InlineDominoSvg topVal={topVal} bottomVal={bottomVal} />
-      </div>
+      <InlineDominoSvg
+        val1={val1}
+        val2={val2}
+        isHorizontal={isHorizontal}
+      />
     </motion.div>
   );
 };

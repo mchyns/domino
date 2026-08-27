@@ -18,7 +18,7 @@ interface GameStoreState {
   syncEngine: BroadcastSyncEngine | null;
   isLoading: boolean;
 
-  connectRoom: (roomCode: string) => void;
+  connectRoom: (roomCode: string, customNickname?: string) => void;
   disconnectRoom: () => void;
   createRoom: (maxPlayers: PlayerCount) => RoomState;
   joinRoom: (roomCode: string, nickname: string) => void;
@@ -41,14 +41,15 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   syncEngine: null,
   isLoading: false,
 
-  connectRoom: (roomCode: string) => {
+  connectRoom: (roomCode: string, customNickname?: string) => {
     const { userId, nickname } = usePlayerStore.getState();
+    const effectiveNick = customNickname || nickname || 'Pemain';
     const existingEngine = get().syncEngine;
     if (existingEngine) {
       existingEngine.disconnect();
     }
 
-    const engine = new BroadcastSyncEngine(userId, nickname);
+    const engine = new BroadcastSyncEngine(userId, effectiveNick);
 
     engine.onStateChange((newState, newHand) => {
       const prevMatch = get().roomState?.match;

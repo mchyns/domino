@@ -162,6 +162,119 @@ class SoundSynthesizer {
   }
 
   /**
+   * Sound: Realistic Domino Shuffling Clatter (lightweight, zero-latency)
+   */
+  public playShuffleSound(): void {
+    const ctx = this.getAudioContext();
+    if (!ctx) return;
+
+    try {
+      const now = ctx.currentTime;
+      const bursts = [0, 0.08, 0.16, 0.25, 0.35, 0.46, 0.58, 0.70];
+
+      bursts.forEach((offset, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+
+        const baseFreq = 260 + (idx % 3) * 80;
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(baseFreq, now + offset);
+        osc.frequency.exponentialRampToValueAtTime(100, now + offset + 0.035);
+
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(900 + (idx % 4) * 200, now + offset);
+
+        gain.gain.setValueAtTime(0.08, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.035);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.04);
+      });
+    } catch {
+      // Ignore audio error
+    }
+  }
+
+  /**
+   * Sound: Dealing card slide / whoosh
+   */
+  public playDealSlideSound(delay = 0): void {
+    const ctx = this.getAudioContext();
+    if (!ctx) return;
+
+    try {
+      const now = ctx.currentTime + delay;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(500, now);
+      osc.frequency.exponentialRampToValueAtTime(180, now + 0.08);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(2200, now);
+      filter.frequency.linearRampToValueAtTime(400, now + 0.08);
+
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.09);
+    } catch {
+      // Ignore audio error
+    }
+  }
+
+  /**
+   * Sound: Starter Tile crisp flip onto board
+   */
+  public playStarterFlipSound(): void {
+    const ctx = this.getAudioContext();
+    if (!ctx) return;
+
+    try {
+      const now = ctx.currentTime;
+      // High snap
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(680, now);
+      osc1.frequency.exponentialRampToValueAtTime(200, now + 0.06);
+      gain1.gain.setValueAtTime(0.22, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.07);
+
+      // Low thump
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(140, now);
+      osc2.frequency.exponentialRampToValueAtTime(50, now + 0.08);
+      gain2.gain.setValueAtTime(0.2, now);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now);
+      osc2.stop(now + 0.09);
+    } catch {
+      // Ignore audio error
+    }
+  }
+
+  /**
    * Sound: Rapid cards dealing shuffle
    */
   public playDealSound(): void {
@@ -193,3 +306,4 @@ class SoundSynthesizer {
 }
 
 export const soundFx = new SoundSynthesizer();
+

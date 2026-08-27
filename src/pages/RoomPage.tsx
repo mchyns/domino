@@ -9,9 +9,11 @@ import { TurnBanner } from '../components/game/TurnBanner';
 import { PlayerHand } from '../components/game/PlayerHand';
 import { PlacementSelector } from '../components/game/PlacementSelector';
 import { GameOverDialog } from '../components/game/GameOverDialog';
+import { ShuffleDealAnimation } from '../components/game/ShuffleDealAnimation';
 import { DominoTileData } from '../engine/types';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
+import { motion } from 'framer-motion';
 import { Users, RotateCcw, ArrowLeft } from 'lucide-react';
 
 interface RoomPageProps {
@@ -39,12 +41,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomCode, onLeave }) => {
   const [dualChoiceTile, setDualChoiceTile] = useState<DominoTileData | null>(null);
   const [askNameModalOpen, setAskNameModalOpen] = useState(!nickname);
   const [tempName, setTempName] = useState(nickname || '');
+  const [hasShownShuffle, setHasShownShuffle] = useState<string | null>(null);
 
   useEffect(() => {
-    if (nickname) {
-      joinRoom(roomCode, nickname);
-    } else {
-      setAskNameModalOpen(true);
+    if (!roomState || roomState.code !== roomCode) {
+      if (nickname) {
+        joinRoom(roomCode, nickname);
+      } else {
+        setAskNameModalOpen(true);
+      }
     }
   }, [roomCode]);
 
@@ -240,41 +245,114 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomCode, onLeave }) => {
       <GameHUD roomCode={roomState.code} onLeaveRoom={handleLeave} />
 
       <main className="flex-1 flex flex-col justify-between p-2 sm:p-4 max-w-5xl mx-auto w-full relative">
-        <div className="w-full flex justify-center py-1">
-          {topPlayer && (
-            <PlayerSeat
-              player={topPlayer}
-              isCurrentTurn={match.currentPlayerId === topPlayer.id}
-              position="top"
-            />
-          )}
-        </div>
+        {/* Higgs Domino Emerald Felt Table Mat */}
+        <div
+          className="relative flex-1 w-full rounded-2xl sm:rounded-3xl p-2.5 sm:p-5 my-auto flex flex-col justify-between overflow-hidden shadow-2xl border transition-all"
+          style={{
+            background: 'radial-gradient(ellipse at 50% 45%, #185a46 0%, #0d382b 65%, #071f18 100%)',
+            borderColor: '#248268',
+            boxShadow: 'inset 0 0 50px rgba(0,0,0,0.6), 0 12px 36px rgba(0,0,0,0.35)',
+          }}
+        >
+          {/* Subtle Felt Texture Pattern Overlay */}
+          <div className="absolute inset-0 pointer-events-none opacity-5 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]" />
 
-        <div className="flex-1 flex items-center justify-between gap-2 my-auto w-full">
-          <div className="w-20 sm:w-28 flex justify-start shrink-0">
+          {/* Top Row: Left Head, Top Player Seat, Right Head */}
+          <div className="w-full flex items-center justify-between px-1 sm:px-4 py-1 relative gap-2 z-20">
+            {/* KIRI HEAD BADGE (Pojok Kiri Atas) */}
+            <div className="w-20 sm:w-28 flex justify-start shrink-0">
+              {match.leftValue !== null && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-2xl border shadow-lg backdrop-blur-md"
+                  style={{
+                    backgroundColor: 'rgba(7, 31, 24, 0.85)',
+                    borderColor: '#248268',
+                  }}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                  <div className="flex flex-col">
+                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider leading-none text-emerald-200/70">
+                      Kiri
+                    </span>
+                    <span className="font-mono text-base sm:text-xl font-black leading-tight text-white">
+                      {match.leftValue}
+                    </span>
+                  </div>
+                </motion.div>
+              )}
+            </div>
+
+            {/* TOP PLAYER SEAT (Tengah) */}
+            <div className="flex justify-center flex-1 min-w-0">
+              {topPlayer && (
+                <PlayerSeat
+                  player={topPlayer}
+                  isCurrentTurn={match.currentPlayerId === topPlayer.id}
+                  position="top"
+                />
+              )}
+            </div>
+
+            {/* KANAN HEAD BADGE (Pojok Kanan Atas) */}
+            <div className="w-20 sm:w-28 flex justify-end shrink-0">
+              {match.rightValue !== null && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-2xl border shadow-lg backdrop-blur-md"
+                  style={{
+                    backgroundColor: 'rgba(7, 31, 24, 0.85)',
+                    borderColor: '#248268',
+                  }}
+                >
+                  <div className="flex flex-col text-right">
+                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider leading-none text-emerald-200/70">
+                      Kanan
+                    </span>
+                    <span className="font-mono text-base sm:text-xl font-black leading-tight text-white">
+                      {match.rightValue}
+                    </span>
+                  </div>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                </motion.div>
+              )}
+            </div>
+          </div>
+
+          {/* Center Table Area with Domino Chain Canvas and Floating Side Players */}
+          <div className="flex-1 flex items-center justify-center w-full relative z-10 min-h-0">
+            {/* Left Player Seat (Pinned on Left Edge) */}
             {leftPlayer && (
-              <PlayerSeat
-                player={leftPlayer}
-                isCurrentTurn={match.currentPlayerId === leftPlayer.id}
-                position="left"
-              />
+              <div className="absolute left-1 sm:left-3 top-1/2 -translate-y-1/2 z-20">
+                <PlayerSeat
+                  player={leftPlayer}
+                  isCurrentTurn={match.currentPlayerId === leftPlayer.id}
+                  position="left"
+                />
+              </div>
             )}
-          </div>
-          <div className="flex-1 flex flex-col items-center justify-center min-w-0">
-            <DominoBoard
-              board={match.board}
-              leftValue={match.leftValue}
-              rightValue={match.rightValue}
-              isMyTurn={isMyTurn}
-            />
-          </div>
-          <div className="w-20 sm:w-28 flex justify-end shrink-0">
-            {rightPlayer && (
-              <PlayerSeat
-                player={rightPlayer}
-                isCurrentTurn={match.currentPlayerId === rightPlayer.id}
-                position="right"
+
+            {/* Center Domino Board Canvas (Full Free Space) */}
+            <div className="w-full h-full flex flex-col items-center justify-center px-10 sm:px-14">
+              <DominoBoard
+                board={match.board}
+                leftValue={match.leftValue}
+                rightValue={match.rightValue}
+                isMyTurn={isMyTurn}
               />
+            </div>
+
+            {/* Right Player Seat (Pinned on Right Edge) */}
+            {rightPlayer && (
+              <div className="absolute right-1 sm:right-3 top-1/2 -translate-y-1/2 z-20">
+                <PlayerSeat
+                  player={rightPlayer}
+                  isCurrentTurn={match.currentPlayerId === rightPlayer.id}
+                  position="right"
+                />
+              </div>
             )}
           </div>
         </div>
@@ -309,6 +387,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomCode, onLeave }) => {
         onRematch={requestRematch}
         onLeaveRoom={handleLeave}
       />
+
+      {/* Intro Shuffle & Deal Animation on Match Start */}
+      {hasShownShuffle !== match.id && (Date.now() - match.startedAt < 8000) && (
+        <ShuffleDealAnimation
+          starterTile={match.starterTile || null}
+          playerCount={roomState.players.length}
+          onComplete={() => setHasShownShuffle(match.id)}
+        />
+      )}
     </div>
   );
 };
