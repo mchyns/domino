@@ -1,0 +1,7 @@
+Domino Vector Assets (28 Double-Six Tiles + Tile Back)
+-------------------------------------------------------
+Source: Custom authored vector SVGs for Domino Room Web Application
+License: Creative Commons Zero (CC0 1.0 Universal) / Public Domain Dedication
+Summary: You are free to copy, modify, distribute and perform the work, even for commercial purposes, all without asking permission.
+File format: SVG (Scalable Vector Graphics)
+Created: 2026-08-28
