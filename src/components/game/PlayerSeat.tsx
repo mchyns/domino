@@ -182,7 +182,7 @@ export const PlayerSeat: React.FC<PlayerSeatProps> = ({
           </span>
         ) : isBotPlayer ? (
           <span className="text-[9px] font-semibold text-emerald-400 uppercase tracking-tighter leading-none">
-            🤖 AI
+            🤖 Bot
           </span>
         ) : null}
       </div>

@@ -56,7 +56,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
       <div className="text-center space-y-1">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: 'var(--text-ink)' }}>DOMINO ROOM</h1>
         <p className="text-xs sm:text-sm" style={{ color: 'var(--text-ink-secondary)' }}>
-          Undang teman atau isi dengan Bot AI cerdas untuk langsung bermain.
+          Undang teman atau isi dengan Bot untuk langsung bermain.
         </p>
       </div>
 
@@ -79,7 +79,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
             className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-emerald-600/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 transition-all shadow-sm"
           >
             <Bot className="w-4 h-4" />
-            Isi Semua Slot dengan Bot AI
+            Isi Semua Slot dengan Bot
           </button>
         </div>
       )}

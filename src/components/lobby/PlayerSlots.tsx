@@ -71,7 +71,7 @@ export const PlayerSlots: React.FC<PlayerSlotsProps> = ({
                       {isBotPlayer ? (
                         <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          AI Bot
+                          Bot
                         </span>
                       ) : (
                         <>
@@ -132,10 +132,10 @@ export const PlayerSlots: React.FC<PlayerSlotsProps> = ({
                 <button
                   onClick={onAddBot}
                   className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md border border-emerald-600/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 transition-all"
-                  title="Tambah Bot AI"
+                  title="Tambah Bot"
                 >
                   <Plus className="w-3 h-3" />
-                  Bot AI
+                  Bot
                 </button>
               )}
             </div>

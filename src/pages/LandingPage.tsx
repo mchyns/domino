@@ -147,7 +147,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             DOMINO
           </h1>
           <p className="text-xs sm:text-sm max-w-xs mx-auto text-emerald-600 dark:text-emerald-400 font-medium">
-            Main domino online bareng teman atau latihan solo lawan Bot AI.
+            Main domino online bareng teman atau latihan solo lawan Bot.
           </p>
         </motion.div>
 
@@ -158,13 +158,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           transition={{ delay: 0.16, duration: 0.25 }}
           className="space-y-2.5 pt-4 w-full max-w-xs mx-auto"
         >
-          {/* Main Lawan Bot AI (Solo) Button */}
+          {/* Main Lawan Bot Button */}
           <button
             onClick={handleOpenBotModal}
             className="w-full flex items-center justify-center gap-2 font-bold text-sm sm:text-base h-12 rounded-xl text-white shadow-lg bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 transition-all hover:scale-[1.02] active:scale-[0.98] border border-emerald-400/30"
           >
             <Bot className="w-5 h-5 text-emerald-200 animate-bounce" />
-            <span>Main Lawan Bot AI</span>
+            <span>Main Lawan Bot</span>
           </button>
 
           {/* Buat Room Multiplayer Button */}
@@ -200,8 +200,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <Modal
         isOpen={isBotModalOpen}
         onClose={() => setIsBotModalOpen(false)}
-        title="🤖 Main Lawan Bot AI"
-        description="Pilih jumlah pemain. Slot lawan akan otomatis diisi oleh Bot AI cerdas."
+        title="🤖 Main Lawan Bot"
+        description="Pilih jumlah pemain. Slot lawan akan otomatis diisi oleh Bot."
       >
         <form onSubmit={handleBotSubmit} className="space-y-4 pt-2">
           <div>
