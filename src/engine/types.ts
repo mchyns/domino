@@ -26,6 +26,7 @@ export interface PlayerPublicInfo {
   isConnected: boolean;
   tileCount: number;
   lastSeen: number;
+  isBot?: boolean;
 }
 
 export type RoomStatus = 'lobby' | 'playing' | 'finished' | 'closed';
@@ -63,6 +64,8 @@ export interface MatchState {
   };
   startedAt: number;
   finishedAt?: number;
+  turnDeadline?: number;  // Timestamp when current turn expires
+  turnDuration?: number;  // Duration of turn in ms (default 15000)
 }
 
 export interface RoomState {

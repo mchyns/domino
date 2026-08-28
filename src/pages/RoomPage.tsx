@@ -290,6 +290,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomCode, onLeave }) => {
                   player={topPlayer}
                   isCurrentTurn={match.currentPlayerId === topPlayer.id}
                   position="top"
+                  turnDeadline={match.turnDeadline}
+                  turnDuration={match.turnDuration}
                 />
               )}
             </div>
@@ -328,6 +330,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomCode, onLeave }) => {
                   player={leftPlayer}
                   isCurrentTurn={match.currentPlayerId === leftPlayer.id}
                   position="left"
+                  turnDeadline={match.turnDeadline}
+                  turnDuration={match.turnDuration}
                 />
               </div>
             )}
@@ -349,6 +353,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomCode, onLeave }) => {
                   player={rightPlayer}
                   isCurrentTurn={match.currentPlayerId === rightPlayer.id}
                   position="right"
+                  turnDeadline={match.turnDeadline}
+                  turnDuration={match.turnDuration}
                 />
               </div>
             )}
@@ -358,6 +364,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({ roomCode, onLeave }) => {
         <TurnBanner
           isMyTurn={isMyTurn}
           currentPlayerNickname={currentPlayer?.nickname || 'Pemain'}
+          turnDeadline={match.turnDeadline}
+          turnDuration={match.turnDuration}
           lastAction={match.lastAction}
         />
       </main>

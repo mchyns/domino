@@ -27,6 +27,9 @@ interface GameStoreState {
   passTurn: () => void;
   requestRematch: () => void;
   leaveRoom: () => void;
+  addBot: () => void;
+  removeBot: (botId: string) => void;
+  fillBots: () => void;
   selectTile: (tileId: string | null) => void;
   showToast: (msg: string) => void;
   clearToast: () => void;
@@ -173,6 +176,27 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       engine.leaveRoom();
     }
     get().disconnectRoom();
+  },
+
+  addBot: () => {
+    const engine = get().syncEngine;
+    if (engine) {
+      engine.addBotPlayer();
+    }
+  },
+
+  removeBot: (botId: string) => {
+    const engine = get().syncEngine;
+    if (engine) {
+      engine.removeBotPlayer(botId);
+    }
+  },
+
+  fillBots: () => {
+    const engine = get().syncEngine;
+    if (engine) {
+      engine.fillBots();
+    }
   },
 
   selectTile: (tileId: string | null) => {

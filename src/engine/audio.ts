@@ -303,6 +303,69 @@ class SoundSynthesizer {
       // Ignore audio error
     }
   }
+
+  /**
+   * Sound: Crisp clock tick-tock countdown
+   */
+  public playTickSound(isUrgent: boolean = false): void {
+    const ctx = this.getAudioContext();
+    if (!ctx) return;
+
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+
+      osc.type = isUrgent ? 'sawtooth' : 'triangle';
+      osc.frequency.setValueAtTime(isUrgent ? 950 : 750, now);
+      osc.frequency.exponentialRampToValueAtTime(300, now + 0.03);
+
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(isUrgent ? 2200 : 1600, now);
+
+      gain.gain.setValueAtTime(isUrgent ? 0.18 : 0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.04);
+    } catch {
+      // Ignore audio error
+    }
+  }
+
+  /**
+   * Sound: Buzzer / Alert on turn timeout
+   */
+  public playTimeoutSound(): void {
+    const ctx = this.getAudioContext();
+    if (!ctx) return;
+
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(260, now);
+      osc.frequency.linearRampToValueAtTime(180, now + 0.15);
+
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.22);
+    } catch {
+      // Ignore audio error
+    }
+  }
 }
 
 export const soundFx = new SoundSynthesizer();

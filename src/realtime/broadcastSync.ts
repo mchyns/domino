@@ -15,6 +15,7 @@ import {
   getNextPlayerId,
   getLegalMovesInHand,
 } from '../engine/gameRules';
+import { createBotPlayer, chooseBotMove } from '../engine/botAI';
 
 export interface SyncMessage {
   type:
@@ -52,6 +53,8 @@ export class BroadcastSyncEngine {
 
   // Authoritative host memory (stored only in host's instance/storage)
   private allHandsAuth: Record<string, DominoTileData[]> = {};
+  private botActionTimeout: any = null;
+  private afkTimeout: any = null;
 
   constructor(userId: string, nickname: string) {
     this.currentUserId = userId;
@@ -217,6 +220,9 @@ export class BroadcastSyncEngine {
   }
 
   public disconnect(): void {
+    if (this.botActionTimeout) clearTimeout(this.botActionTimeout);
+    if (this.afkTimeout) clearTimeout(this.afkTimeout);
+
     if (this.channel) {
       this.leaveRoom();
       this.channel.close();
@@ -248,6 +254,7 @@ export class BroadcastSyncEngine {
     this.stateListeners.forEach((fn) =>
       fn(this.localRoomState!, this.localPrivateHand)
     );
+    this.checkTurnAutomation();
   }
 
   private notifyError(msg: string): void {
@@ -488,6 +495,8 @@ export class BroadcastSyncEngine {
       winnerPlayerId: null,
       winReason: null,
       startedAt: now,
+      turnDuration: 15000,
+      turnDeadline: now + 15000,
       lastAction: {
         type: 'start',
         playerId: this.currentUserId,
@@ -644,6 +653,100 @@ export class BroadcastSyncEngine {
   }
 
   /**
+   * ADD BOT PLAYER (Host only)
+   */
+  public addBotPlayer(): void {
+    if (!this.isHost() || !this.localRoomState) {
+      this.notifyError('Hanya host yang dapat menambahkan bot.');
+      return;
+    }
+    if (this.localRoomState.players.length >= this.localRoomState.maxPlayers) {
+      this.notifyError('Slot pemain sudah penuh.');
+      return;
+    }
+
+    const existingNames = this.localRoomState.players.map((p) => p.nickname);
+    const botPlayer = createBotPlayer(this.localRoomState.players.length + 1, existingNames);
+    const updatedPlayers = [...this.localRoomState.players, botPlayer];
+
+    const updatedRoomState: RoomState = {
+      ...this.localRoomState,
+      players: updatedPlayers,
+      updatedAt: Date.now(),
+    };
+
+    this.localRoomState = updatedRoomState;
+    this.saveStateToStorage(updatedRoomState);
+
+    this.broadcast({
+      type: 'STATE_UPDATE',
+      roomCode: this.roomCode,
+      senderId: this.currentUserId,
+      payload: { roomState: updatedRoomState },
+    });
+    this.notifyState();
+  }
+
+  /**
+   * REMOVE BOT PLAYER (Host only)
+   */
+  public removeBotPlayer(botId: string): void {
+    if (!this.isHost() || !this.localRoomState) {
+      this.notifyError('Hanya host yang dapat menghapus bot.');
+      return;
+    }
+
+    const updatedPlayers = this.localRoomState.players.filter((p) => p.id !== botId);
+    const updatedRoomState: RoomState = {
+      ...this.localRoomState,
+      players: updatedPlayers,
+      updatedAt: Date.now(),
+    };
+
+    this.localRoomState = updatedRoomState;
+    this.saveStateToStorage(updatedRoomState);
+
+    this.broadcast({
+      type: 'STATE_UPDATE',
+      roomCode: this.roomCode,
+      senderId: this.currentUserId,
+      payload: { roomState: updatedRoomState },
+    });
+    this.notifyState();
+  }
+
+  /**
+   * FILL ALL OPEN SLOTS WITH BOTS (Host only)
+   */
+  public fillBots(): void {
+    if (!this.isHost() || !this.localRoomState) return;
+
+    const currentPlayers = [...this.localRoomState.players];
+    while (currentPlayers.length < this.localRoomState.maxPlayers) {
+      const existingNames = currentPlayers.map((p) => p.nickname);
+      const botPlayer = createBotPlayer(currentPlayers.length + 1, existingNames);
+      currentPlayers.push(botPlayer);
+    }
+
+    const updatedRoomState: RoomState = {
+      ...this.localRoomState,
+      players: currentPlayers,
+      updatedAt: Date.now(),
+    };
+
+    this.localRoomState = updatedRoomState;
+    this.saveStateToStorage(updatedRoomState);
+
+    this.broadcast({
+      type: 'STATE_UPDATE',
+      roomCode: this.roomCode,
+      senderId: this.currentUserId,
+      payload: { roomState: updatedRoomState },
+    });
+    this.notifyState();
+  }
+
+  /**
    * Host authoritative tile play execution
    */
   private executePlayTileAuth(
@@ -733,6 +836,8 @@ export class BroadcastSyncEngine {
         winReason,
         scores,
         finishedAt: isWinner ? now : undefined,
+        turnDuration: 15000,
+        turnDeadline: isWinner ? undefined : now + 15000,
         lastAction: {
           type: 'play',
           playerId,
@@ -816,6 +921,8 @@ export class BroadcastSyncEngine {
       winReason,
       scores,
       finishedAt: isBlocked ? now : undefined,
+      turnDuration: 15000,
+      turnDeadline: isBlocked ? undefined : now + 15000,
       lastAction: {
         type: 'pass',
         playerId,
@@ -842,6 +949,72 @@ export class BroadcastSyncEngine {
     });
 
     this.notifyState();
+  }
+
+  /**
+   * Automatic execution for Bots and AFK Timeouts
+   */
+  private checkTurnAutomation(): void {
+    if (!this.isHost() || !this.localRoomState || !this.localRoomState.match) return;
+    const match = this.localRoomState.match;
+    if (match.status !== 'playing') {
+      if (this.botActionTimeout) clearTimeout(this.botActionTimeout);
+      if (this.afkTimeout) clearTimeout(this.afkTimeout);
+      return;
+    }
+
+    const currentId = match.currentPlayerId;
+    const currentPlayer = this.localRoomState.players.find((p) => p.id === currentId);
+
+    // 1. If current player is a BOT:
+    if (currentPlayer?.isBot) {
+      if (this.botActionTimeout) clearTimeout(this.botActionTimeout);
+      this.botActionTimeout = setTimeout(() => {
+        this.executeBotTurn(currentId);
+      }, 1200 + Math.random() * 600); // 1.2s - 1.8s realistic thinking delay
+      return;
+    }
+
+    // 2. If current player is HUMAN, monitor turnDeadline (15s AFK auto-action):
+    if (this.afkTimeout) clearTimeout(this.afkTimeout);
+    const deadline = match.turnDeadline || (Date.now() + 15000);
+    const remainingMs = Math.max(200, deadline - Date.now());
+
+    this.afkTimeout = setTimeout(() => {
+      this.executeTimeoutAction(currentId);
+    }, remainingMs);
+  }
+
+  private executeBotTurn(botId: string): void {
+    if (!this.isHost() || !this.localRoomState || !this.localRoomState.match) return;
+    const match = this.localRoomState.match;
+    if (match.status !== 'playing' || match.currentPlayerId !== botId) return;
+
+    const botHand = this.allHandsAuth[botId] || [];
+    const decision = chooseBotMove(botHand, match.leftValue, match.rightValue);
+
+    if (decision.action === 'play' && decision.tileId) {
+      this.executePlayTileAuth(botId, decision.tileId, decision.side || 'left');
+    } else {
+      this.executePassAuth(botId);
+    }
+  }
+
+  private executeTimeoutAction(playerId: string): void {
+    if (!this.isHost() || !this.localRoomState || !this.localRoomState.match) return;
+    const match = this.localRoomState.match;
+    if (match.status !== 'playing' || match.currentPlayerId !== playerId) return;
+
+    const playerHand =
+      this.allHandsAuth[playerId] ||
+      (playerId === this.currentUserId ? this.localPrivateHand : []);
+    const decision = chooseBotMove(playerHand, match.leftValue, match.rightValue);
+
+    if (decision.action === 'play' && decision.tileId) {
+      this.executePlayTileAuth(playerId, decision.tileId, decision.side || 'left');
+    } else {
+      this.executePassAuth(playerId);
+    }
   }
 
   private handleIncomingMessage(msg: SyncMessage): void {
